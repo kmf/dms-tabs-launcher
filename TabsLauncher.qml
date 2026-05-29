@@ -32,8 +32,36 @@ QtObject {
         return root._resolvedBtPath || "bt";
     }
 
+    // Strategies in order: current PATH, user's login shell (loads rc/profile so
+    // PATH additions like ~/.local/bin are picked up), systemd user-manager PATH,
+    // then a brute-force scan of common install locations as a final safety net.
+    readonly property string _resolveScript:
+        "p=$(command -v bt 2>/dev/null); [ -n \"$p\" ] && { echo \"$p\"; exit 0; };" +
+        "if [ -n \"$SHELL\" ] && [ -x \"$SHELL\" ]; then" +
+        "  p=$(\"$SHELL\" -lc 'command -v bt' 2>/dev/null);" +
+        "  [ -n \"$p\" ] && { echo \"$p\"; exit 0; };" +
+        "fi;" +
+        "if command -v bash >/dev/null 2>&1; then" +
+        "  p=$(bash -lc 'command -v bt' 2>/dev/null);" +
+        "  [ -n \"$p\" ] && { echo \"$p\"; exit 0; };" +
+        "fi;" +
+        "if command -v systemctl >/dev/null 2>&1; then" +
+        "  spath=$(systemctl --user show-environment 2>/dev/null | sed -n 's/^PATH=//p');" +
+        "  if [ -n \"$spath\" ]; then" +
+        "    IFS=:;" +
+        "    for d in $spath; do" +
+        "      [ -x \"$d/bt\" ] && { echo \"$d/bt\"; exit 0; };" +
+        "    done;" +
+        "    unset IFS;" +
+        "  fi;" +
+        "fi;" +
+        "for p in \"$HOME/.local/bin/bt\" \"$HOME/bin/bt\" /usr/local/bin/bt /usr/bin/bt /opt/brotab/bin/bt; do" +
+        "  [ -x \"$p\" ] && { echo \"$p\"; exit 0; };" +
+        "done;" +
+        "exit 1"
+
     property var resolveProcess: Process {
-        command: ["sh", "-c", "for p in \"$HOME/.local/bin/bt\" /usr/local/bin/bt /usr/bin/bt; do [ -x \"$p\" ] && { echo \"$p\"; exit 0; }; done; command -v bt 2>/dev/null"]
+        command: ["sh", "-c", root._resolveScript]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
@@ -44,7 +72,7 @@ QtObject {
                     root.refreshClients();
                     root.refreshTabs();
                 } else {
-                    console.warn("[TabsLauncher] bt not found on system");
+                    console.warn("[TabsLauncher] bt not found on system; set 'BroTab Path' in plugin settings to override");
                 }
             }
         }
