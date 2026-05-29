@@ -22,6 +22,7 @@ Sister plugin / structural template: [kmf/dms-obsidian-search](https://github.co
 - **Tab activation uses `bt activate --focused <tab_id>`** so the window is focused too, not just the tab.
 - **Settings are persisted via `pluginService.loadPluginData / saveValue`** keyed under the plugin id `tabsLauncher`. `updateSettings()` is the single source of truth for applying settings — re-run it when settings change rather than scattering reads.
 - **The `noTrigger` setting** is paired with `trigger`: toggling it on writes an empty `trigger`, toggling it off restores the user's keyword. This mirrors dms-obsidian-search; keep the pair in sync if you touch either.
+- **`bt` is not on `dms.service`'s `PATH`.** The systemd unit runs with an empty `Environment=`, so a bare `["bt", "list"]` fails with "Process failed to start, likely because the binary could not be found." `resolveProcess` runs a shell on startup to look up `bt` in `$HOME/.local/bin`, `/usr/local/bin`, `/usr/bin`, then `command -v bt`, and caches the absolute path in `_resolvedBtPath`. Always spawn `bt` via `effectiveBtPath()`, never via the raw `btPath` property. If you add another external binary, do the same.
 
 ## Commits
 

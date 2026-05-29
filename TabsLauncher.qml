@@ -17,10 +17,36 @@ QtObject {
     // [{ id, title, url }]
     property var tabs: []
     property bool _loading: false
+    // Resolved bt absolute path. dms.service has a minimal PATH so a bare
+    // "bt" usually fails — we look it up in common install locations once.
+    property string _resolvedBtPath: ""
+
+    function effectiveBtPath() {
+        if (root.btPath && root.btPath !== "bt")
+            return root.btPath;
+        return root._resolvedBtPath || "bt";
+    }
+
+    property var resolveProcess: Process {
+        command: ["sh", "-c", "for p in \"$HOME/.local/bin/bt\" /usr/local/bin/bt /usr/bin/bt; do [ -x \"$p\" ] && { echo \"$p\"; exit 0; }; done; command -v bt 2>/dev/null"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let p = (text || "").trim();
+                if (p.length > 0) {
+                    root._resolvedBtPath = p;
+                    console.log("[TabsLauncher] Resolved bt to", p);
+                    root.refreshTabs();
+                } else {
+                    console.warn("[TabsLauncher] bt not found on system");
+                }
+            }
+        }
+    }
 
     // bt list output is TSV: <tab_id>\t<title>\t<url>
     property var listProcess: Process {
-        command: [root.btPath, "list"]
+        command: [root.effectiveBtPath(), "list"]
         running: false
 
         stdout: StdioCollector {
@@ -40,7 +66,7 @@ QtObject {
         if (root._loading)
             return;
         root._loading = true;
-        root.listProcess.command = [root.btPath, "list"];
+        root.listProcess.command = [root.effectiveBtPath(), "list"];
         root.listProcess.running = true;
     }
 
@@ -129,7 +155,7 @@ QtObject {
     function executeItem(item) {
         if (!item || !item._tabId)
             return;
-        Quickshell.execDetached([root.btPath, "activate", "--focused", item._tabId]);
+        Quickshell.execDetached([root.effectiveBtPath(), "activate", "--focused", item._tabId]);
     }
 
     function getContextMenuActions(item) {
@@ -148,7 +174,7 @@ QtObject {
                 icon: "close",
                 text: "Close tab",
                 action: () => {
-                    Quickshell.execDetached([root.btPath, "close", item._tabId]);
+                    Quickshell.execDetached([root.effectiveBtPath(), "close", item._tabId]);
                     root.refreshTabs();
                 }
             },
@@ -174,6 +200,11 @@ QtObject {
         if (!root.enabled) {
             root.tabs = [];
             root.itemsChanged();
+            return;
+        }
+
+        if (root.btPath === "bt" && root._resolvedBtPath.length === 0) {
+            root.resolveProcess.running = true;
         } else {
             root.refreshTabs();
         }
