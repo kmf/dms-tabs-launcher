@@ -2,6 +2,8 @@
 
 A [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell) launcher plugin that lists every open browser tab and lets you jump to one from the launcher. Tabs are sourced via [BroTab](https://github.com/balta2ar/brotab).
 
+![Screenshot](screenshot.png)
+
 ## Features
 
 - Lists open tabs across every browser BroTab is connected to
