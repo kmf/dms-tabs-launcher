@@ -1,0 +1,15 @@
+{
+    "id": "tabsLauncher",
+    "name": "Browser Tabs Launcher",
+    "description": "List and activate open browser tabs via BroTab",
+    "version": "0.1.0",
+    "license": "MIT",
+    "author": "kmf",
+    "icon": "tab",
+    "type": "launcher",
+    "component": "./TabsLauncher.qml",
+    "settings": "./TabsLauncherSettings.qml",
+    "requires_dms": ">=1.4.0",
+    "permissions": ["settings_read", "settings_write"],
+    "trigger": "\\tab"
+}
