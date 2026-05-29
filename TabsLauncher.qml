@@ -20,6 +20,11 @@ QtObject {
     // Resolved bt absolute path. dms.service has a minimal PATH so a bare
     // "bt" usually fails — we look it up in common install locations once.
     property string _resolvedBtPath: ""
+    // Tab ID prefix (e.g. "a.") -> freedesktop icon name (e.g. "brave-browser").
+    // bt clients reports "chrome/chromium" for every Chromium-based browser,
+    // so we identify the actual browser by walking bt_mediator's PPID to
+    // /proc/<ppid>/comm.
+    property var clientIcons: ({})
 
     function effectiveBtPath() {
         if (root.btPath && root.btPath !== "bt")
@@ -36,6 +41,7 @@ QtObject {
                 if (p.length > 0) {
                     root._resolvedBtPath = p;
                     console.log("[TabsLauncher] Resolved bt to", p);
+                    root.refreshClients();
                     root.refreshTabs();
                 } else {
                     console.warn("[TabsLauncher] bt not found on system");
@@ -68,6 +74,74 @@ QtObject {
         root._loading = true;
         root.listProcess.command = [root.effectiveBtPath(), "list"];
         root.listProcess.running = true;
+    }
+
+    property var clientsProcess: Process {
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let map = {};
+                let lines = (text || "").split("\n");
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i];
+                    if (!line)
+                        continue;
+                    let parts = line.split("\t");
+                    if (parts.length < 2)
+                        continue;
+                    map[parts[0]] = root.iconForBrowserName(parts[1]);
+                }
+                root.clientIcons = map;
+                root.itemsChanged();
+            }
+        }
+    }
+
+    function refreshClients() {
+        let bt = root.effectiveBtPath();
+        if (!bt || bt === "bt")
+            return;
+        // bt clients gives us "<prefix>\t<host>\t<pid>\t<browser>". The pid is
+        // bt_mediator (a Python helper), so we read its parent's comm to get
+        // the actual browser binary name.
+        root.clientsProcess.command = ["sh", "-c",
+            bt + " clients | while IFS=\"\t\" read -r prefix host pid browser; do " +
+            "  ppid=$(awk '/^PPid:/ {print $2}' /proc/$pid/status 2>/dev/null); " +
+            "  [ -n \"$ppid\" ] || continue; " +
+            "  name=$(cat /proc/$ppid/comm 2>/dev/null); " +
+            "  [ -n \"$name\" ] || continue; " +
+            "  printf '%s\t%s\n' \"$prefix\" \"$name\"; " +
+            "done"];
+        root.clientsProcess.running = true;
+    }
+
+    function iconForBrowserName(name) {
+        let n = (name || "").toLowerCase();
+        if (n.indexOf("brave") !== -1)
+            return "brave-browser";
+        if (n.indexOf("firefox") !== -1)
+            return "firefox";
+        if (n.indexOf("librewolf") !== -1)
+            return "librewolf";
+        if (n.indexOf("chromium") !== -1)
+            return "chromium";
+        if (n.indexOf("chrome") !== -1)
+            return "google-chrome";
+        if (n.indexOf("vivaldi") !== -1)
+            return "vivaldi";
+        if (n.indexOf("opera") !== -1)
+            return "opera";
+        return "tab";
+    }
+
+    function iconForTab(tab) {
+        if (!tab || !tab.id)
+            return "tab";
+        let dot = tab.id.indexOf(".");
+        if (dot < 0)
+            return "tab";
+        let prefix = tab.id.substring(0, dot + 1);
+        return root.clientIcons[prefix] || "tab";
     }
 
     function parseTabs(rawData) {
@@ -119,37 +193,12 @@ QtObject {
     function tabToItem(tab) {
         return {
             name: tab.title || tab.url,
-            icon: iconForUrl(tab.url),
+            icon: iconForTab(tab),
             comment: tab.url,
             action: "activate:" + tab.id,
             _tabId: tab.id,
             _url: tab.url
         };
-    }
-
-    function iconForUrl(url) {
-        if (!url)
-            return "tab";
-        let u = url.toLowerCase();
-        if (u.indexOf("youtube.com") !== -1 || u.indexOf("youtu.be") !== -1)
-            return "play_circle";
-        if (u.indexOf("github.com") !== -1 || u.indexOf("gitlab.com") !== -1 || u.indexOf("bitbucket.org") !== -1)
-            return "code";
-        if (u.indexOf("docs.google.com") !== -1)
-            return "description";
-        if (u.indexOf("google.com/search") !== -1)
-            return "search";
-        if (u.indexOf("mail.google.com") !== -1)
-            return "mail";
-        if (u.indexOf("calendar.google.com") !== -1)
-            return "calendar_month";
-        if (u.indexOf("stackoverflow.com") !== -1 || u.indexOf("stackexchange.com") !== -1)
-            return "help";
-        if (u.indexOf("reddit.com") !== -1)
-            return "forum";
-        if (u.indexOf("slack.com") !== -1)
-            return "tag";
-        return "tab";
     }
 
     function executeItem(item) {
@@ -206,6 +255,7 @@ QtObject {
         if (root.btPath === "bt" && root._resolvedBtPath.length === 0) {
             root.resolveProcess.running = true;
         } else {
+            root.refreshClients();
             root.refreshTabs();
         }
     }
