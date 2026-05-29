@@ -71,6 +71,13 @@ QtObject {
     function refreshTabs() {
         if (root._loading)
             return;
+        if (root.btPath === "bt" && root._resolvedBtPath.length === 0) {
+            // Path not resolved yet. Kick off the resolver; its callback will
+            // re-trigger refreshTabs once a real path is known.
+            if (!root.resolveProcess.running)
+                root.resolveProcess.running = true;
+            return;
+        }
         root._loading = true;
         root.listProcess.command = [root.effectiveBtPath(), "list"];
         root.listProcess.running = true;
@@ -260,7 +267,19 @@ QtObject {
         }
     }
 
-    Component.onCompleted: root.updateSettings()
+    Component.onCompleted: {
+        // pluginService may not be injected yet at component completion, but bt
+        // path resolution doesn't depend on it — start it now so refreshTabs is
+        // ready by the time anyone wants the tab list.
+        if (root._resolvedBtPath.length === 0 && !root.resolveProcess.running)
+            root.resolveProcess.running = true;
+        root.updateSettings();
+    }
+
+    onPluginServiceChanged: {
+        if (root.pluginService)
+            root.updateSettings();
+    }
 
     property var settingsListener: Connections {
         target: root.pluginService
@@ -268,13 +287,6 @@ QtObject {
             if (pluginId === "tabsLauncher")
                 root.updateSettings();
         }
-    }
-
-    property var initTimer: Timer {
-        interval: 500
-        running: true
-        repeat: false
-        onTriggered: root.refreshTabs()
     }
 
     property var refreshTimer: Timer {
