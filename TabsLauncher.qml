@@ -281,13 +281,33 @@ QtObject {
         return matches.map(tabToItem);
     }
 
+    function collapseWhitespace(s) {
+        return (s || "").replace(/\s+/g, " ").trim();
+    }
+
+    function truncate(s, max) {
+        s = root.collapseWhitespace(s);
+        if (s.length <= max)
+            return s;
+        return s.substring(0, Math.max(0, max - 1)) + "…";
+    }
+
+    function compactUrl(url) {
+        let u = root.collapseWhitespace(url);
+        u = u.replace(/^https?:\/\//i, "");
+        u = u.replace(/^www\./i, "");
+        return root.truncate(u, 56);
+    }
+
     function tabToItem(tab) {
         let profile = tab.profile || root.profileFromTabId(tab.id);
         let profileName = root.displayNameForProfile(profile);
         return {
-            name: tab.title || tab.url,
+            // Search highlighting uses RichText, which ignores maximumLineCount
+            // and overflows the row — keep these short enough for one line.
+            name: root.truncate(tab.title || tab.url, 56),
             icon: iconForTab(tab),
-            comment: profileName + " · " + (tab.url || ""),
+            comment: profileName + " · " + root.compactUrl(tab.url),
             action: "activate:" + tab.id,
             categories: [profileName],
             keywords: [profile, profileName],
