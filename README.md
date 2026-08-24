@@ -70,8 +70,8 @@ Configure via DMS plugin settings:
 |---|---|---|
 | Enable Plugin | Toggle the plugin on/off | on |
 | tabctl Path | Path to the `tabctl` executable | `tabctl` (PATH) |
-| Always Active | Show results without trigger keyword | off |
-| Launcher Trigger | Keyword to activate the list | `tab` |
+| Always Active | Show results without a trigger prefix | off |
+| Trigger | Prefix to list open tabs | `tab` |
 
 ## Requirements
 

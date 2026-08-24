@@ -32,8 +32,8 @@ PluginSettings {
     ToggleSetting {
         id: noTriggerToggle
         settingKey: "noTrigger"
-        label: "Always Active (No Trigger)"
-        description: value ? "Tabs always appear in the launcher." : "Use a trigger keyword to list tabs."
+        label: "Always Active"
+        description: value ? "Tabs always appear in the launcher. Type a title or URL to filter." : "Use a trigger prefix to list open tabs. Type the trigger followed by a search term."
         defaultValue: false
         onValueChanged: {
             if (value) {
@@ -48,8 +48,9 @@ PluginSettings {
         id: triggerSetting
         visible: !noTriggerToggle.value
         settingKey: "trigger"
-        label: "Launcher Trigger"
-        description: "Example: '\\tab' or 'tabs'"
+        label: "Trigger"
+        description: "Prefix character(s) to list open tabs (e.g., \\tab, @, tabs)"
+        placeholder: "\\tab"
         defaultValue: "tab"
     }
 }

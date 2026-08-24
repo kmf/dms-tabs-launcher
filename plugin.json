@@ -2,7 +2,7 @@
     "id": "tabsLauncher",
     "name": "Browser Tabs Launcher",
     "description": "List and activate open browser tabs via tabctl",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "license": "MIT",
     "author": "kmf",
     "icon": "tab",
