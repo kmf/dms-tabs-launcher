@@ -18,15 +18,15 @@ PluginSettings {
     ToggleSetting {
         settingKey: "enabled"
         label: "Enable Plugin"
-        description: "List open browser tabs in the launcher (via BroTab)"
+        description: "List open browser tabs in the launcher (via tabctl)"
         defaultValue: true
     }
 
     StringSetting {
-        settingKey: "btPath"
-        label: "BroTab Path"
-        description: "Path to the bt executable (e.g. /home/user/.local/bin/bt). Leave as 'bt' to use PATH."
-        defaultValue: "bt"
+        settingKey: "tabctlPath"
+        label: "tabctl Path"
+        description: "Path to the tabctl executable (e.g. /home/user/.local/bin/tabctl). Leave as 'tabctl' to use PATH."
+        defaultValue: "tabctl"
     }
 
     ToggleSetting {

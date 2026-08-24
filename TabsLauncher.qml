@@ -9,40 +9,36 @@ QtObject {
     property var pluginService: null
     property string trigger: "tab"
     property bool enabled: true
-    property string btPath: "bt"
+    property string tabctlPath: "tabctl"
     property int refreshIntervalMs: 5000
 
     signal itemsChanged
 
-    // [{ id, title, url }]
+    // [{ id, title, url, profile }]
     property var tabs: []
     property bool _loading: false
-    // Resolved bt absolute path. dms.service has a minimal PATH so a bare
-    // "bt" usually fails — we look it up in common install locations once.
-    property string _resolvedBtPath: ""
-    // Tab ID prefix (e.g. "a.") -> freedesktop icon name (e.g. "brave-browser").
-    // bt clients reports "chrome/chromium" for every Chromium-based browser,
-    // so we identify the actual browser by walking bt_mediator's PPID to
-    // /proc/<ppid>/comm.
-    property var clientIcons: ({})
+    property string currentCategory: ""
+    // Resolved tabctl absolute path. dms.service has a minimal PATH so a bare
+    // "tabctl" usually fails — we look it up in common install locations once.
+    property string _resolvedTabctlPath: ""
 
-    function effectiveBtPath() {
-        if (root.btPath && root.btPath !== "bt")
-            return root.btPath;
-        return root._resolvedBtPath || "bt";
+    function effectiveTabctlPath() {
+        if (root.tabctlPath && root.tabctlPath !== "tabctl")
+            return root.tabctlPath;
+        return root._resolvedTabctlPath || "tabctl";
     }
 
     // Strategies in order: current PATH, user's login shell (loads rc/profile so
     // PATH additions like ~/.local/bin are picked up), systemd user-manager PATH,
     // then a brute-force scan of common install locations as a final safety net.
     readonly property string _resolveScript:
-        "p=$(command -v bt 2>/dev/null); [ -n \"$p\" ] && { echo \"$p\"; exit 0; };" +
+        "p=$(command -v tabctl 2>/dev/null); [ -n \"$p\" ] && { echo \"$p\"; exit 0; };" +
         "if [ -n \"$SHELL\" ] && [ -x \"$SHELL\" ]; then" +
-        "  p=$(\"$SHELL\" -lc 'command -v bt' 2>/dev/null);" +
+        "  p=$(\"$SHELL\" -lc 'command -v tabctl' 2>/dev/null);" +
         "  [ -n \"$p\" ] && { echo \"$p\"; exit 0; };" +
         "fi;" +
         "if command -v bash >/dev/null 2>&1; then" +
-        "  p=$(bash -lc 'command -v bt' 2>/dev/null);" +
+        "  p=$(bash -lc 'command -v tabctl' 2>/dev/null);" +
         "  [ -n \"$p\" ] && { echo \"$p\"; exit 0; };" +
         "fi;" +
         "if command -v systemctl >/dev/null 2>&1; then" +
@@ -50,12 +46,12 @@ QtObject {
         "  if [ -n \"$spath\" ]; then" +
         "    IFS=:;" +
         "    for d in $spath; do" +
-        "      [ -x \"$d/bt\" ] && { echo \"$d/bt\"; exit 0; };" +
+        "      [ -x \"$d/tabctl\" ] && { echo \"$d/tabctl\"; exit 0; };" +
         "    done;" +
         "    unset IFS;" +
         "  fi;" +
         "fi;" +
-        "for p in \"$HOME/.local/bin/bt\" \"$HOME/bin/bt\" /usr/local/bin/bt /usr/bin/bt /opt/brotab/bin/bt; do" +
+        "for p in \"$HOME/.local/bin/tabctl\" \"$HOME/bin/tabctl\" /usr/local/bin/tabctl /usr/bin/tabctl; do" +
         "  [ -x \"$p\" ] && { echo \"$p\"; exit 0; };" +
         "done;" +
         "exit 1"
@@ -67,20 +63,19 @@ QtObject {
             onStreamFinished: {
                 let p = (text || "").trim();
                 if (p.length > 0) {
-                    root._resolvedBtPath = p;
-                    console.log("[TabsLauncher] Resolved bt to", p);
-                    root.refreshClients();
+                    root._resolvedTabctlPath = p;
+                    console.log("[TabsLauncher] Resolved tabctl to", p);
                     root.refreshTabs();
                 } else {
-                    console.warn("[TabsLauncher] bt not found on system; set 'BroTab Path' in plugin settings to override");
+                    console.warn("[TabsLauncher] tabctl not found on system; set 'tabctl Path' in plugin settings to override");
                 }
             }
         }
     }
 
-    // bt list output is TSV: <tab_id>\t<title>\t<url>
+    // tabctl list output is TSV: <tab_id>\t<title>\t<url>
     property var listProcess: Process {
-        command: [root.effectiveBtPath(), "list"]
+        command: [root.effectiveTabctlPath(), "list"]
         running: false
 
         stdout: StdioCollector {
@@ -92,14 +87,14 @@ QtObject {
         onExited: exitCode => {
             root._loading = false;
             if (exitCode !== 0)
-                console.warn("[TabsLauncher] bt list exited with", exitCode);
+                console.warn("[TabsLauncher] tabctl list exited with", exitCode);
         }
     }
 
     function refreshTabs() {
         if (root._loading)
             return;
-        if (root.btPath === "bt" && root._resolvedBtPath.length === 0) {
+        if (root.tabctlPath === "tabctl" && root._resolvedTabctlPath.length === 0) {
             // Path not resolved yet. Kick off the resolver; its callback will
             // re-trigger refreshTabs once a real path is known.
             if (!root.resolveProcess.running)
@@ -107,57 +102,47 @@ QtObject {
             return;
         }
         root._loading = true;
-        root.listProcess.command = [root.effectiveBtPath(), "list"];
+        root.listProcess.command = [root.effectiveTabctlPath(), "list"];
         root.listProcess.running = true;
     }
 
-    property var clientsProcess: Process {
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let map = {};
-                let lines = (text || "").split("\n");
-                for (let i = 0; i < lines.length; i++) {
-                    let line = lines[i];
-                    if (!line)
-                        continue;
-                    let parts = line.split("\t");
-                    if (parts.length < 2)
-                        continue;
-                    map[parts[0]] = root.iconForBrowserName(parts[1]);
-                }
-                root.clientIcons = map;
-                root.itemsChanged();
-            }
-        }
+    // Tab IDs are <browser>.<window_id>.<tab_id>. Extra profiles of the same
+    // browser get a numeric suffix (firefox2, chrome3) — that suffix is the
+    // profile group, so keep it.
+    function profileFromTabId(tabId) {
+        let id = tabId || "";
+        let dot = id.indexOf(".");
+        if (dot < 0)
+            return "";
+        return id.substring(0, dot);
     }
 
-    function refreshClients() {
-        let bt = root.effectiveBtPath();
-        if (!bt || bt === "bt")
-            return;
-        // bt clients gives us "<prefix>\t<host>\t<pid>\t<browser>". The pid is
-        // bt_mediator (a Python helper), so we read its parent's comm to get
-        // the actual browser binary name.
-        root.clientsProcess.command = ["sh", "-c",
-            bt + " clients | while IFS=\"\t\" read -r prefix host pid browser; do " +
-            "  ppid=$(awk '/^PPid:/ {print $2}' /proc/$pid/status 2>/dev/null); " +
-            "  [ -n \"$ppid\" ] || continue; " +
-            "  name=$(cat /proc/$ppid/comm 2>/dev/null); " +
-            "  [ -n \"$name\" ] || continue; " +
-            "  printf '%s\t%s\n' \"$prefix\" \"$name\"; " +
-            "done"];
-        root.clientsProcess.running = true;
+    function displayNameForProfile(profile) {
+        let p = profile || "";
+        let m = p.match(/^([A-Za-z]+)([0-9]*)$/);
+        if (!m)
+            return p;
+        let family = m[1].toLowerCase();
+        let pretty = family.charAt(0).toUpperCase() + family.slice(1);
+        if (family === "librewolf")
+            pretty = "LibreWolf";
+        if (m[2])
+            return pretty + " " + m[2];
+        return pretty;
     }
 
     function iconForBrowserName(name) {
         let n = (name || "").toLowerCase();
         if (n.indexOf("brave") !== -1)
             return "brave-browser";
-        if (n.indexOf("firefox") !== -1)
-            return "firefox";
         if (n.indexOf("librewolf") !== -1)
             return "librewolf";
+        if (n.indexOf("firefox") !== -1)
+            return "firefox";
+        if (n.indexOf("zen") !== -1)
+            return "zen-browser";
+        if (n.indexOf("helium") !== -1)
+            return "helium";
         if (n.indexOf("chromium") !== -1)
             return "chromium";
         if (n.indexOf("chrome") !== -1)
@@ -172,11 +157,7 @@ QtObject {
     function iconForTab(tab) {
         if (!tab || !tab.id)
             return "tab";
-        let dot = tab.id.indexOf(".");
-        if (dot < 0)
-            return "tab";
-        let prefix = tab.id.substring(0, dot + 1);
-        return root.clientIcons[prefix] || "tab";
+        return root.iconForBrowserName(tab.profile || root.profileFromTabId(tab.id));
     }
 
     function parseTabs(rawData) {
@@ -192,54 +173,134 @@ QtObject {
             result.push({
                 id: parts[0],
                 title: parts[1],
-                url: parts[2]
+                url: parts[2],
+                profile: root.profileFromTabId(parts[0])
             });
         }
         root.tabs = result;
+        if (root.currentCategory.length > 0) {
+            let stillThere = false;
+            for (let i = 0; i < result.length; i++) {
+                if (result[i].profile === root.currentCategory) {
+                    stillThere = true;
+                    break;
+                }
+            }
+            if (!stillThere)
+                root.currentCategory = "";
+        }
         root.itemsChanged();
+        if (root.pluginService)
+            root.pluginService.requestLauncherUpdate("tabsLauncher");
+    }
+
+    function uniqueProfiles() {
+        let profiles = [];
+        let seen = {};
+        for (let i = 0; i < root.tabs.length; i++) {
+            let p = root.tabs[i].profile || root.profileFromTabId(root.tabs[i].id);
+            if (!p || seen[p])
+                continue;
+            seen[p] = true;
+            profiles.push(p);
+        }
+        return profiles;
+    }
+
+    // Profiles become a category dropdown when the plugin is active. Empty
+    // query keeps tabs grouped by profile instead of flattening them.
+    function getCategories() {
+        let profiles = root.uniqueProfiles();
+        if (profiles.length < 2)
+            return [];
+        let cats = [{
+                id: "",
+                name: "All",
+                searchTerm: ""
+            }];
+        for (let i = 0; i < profiles.length; i++) {
+            cats.push({
+                id: profiles[i],
+                name: root.displayNameForProfile(profiles[i]),
+                searchTerm: ""
+            });
+        }
+        return cats;
+    }
+
+    function setCategory(categoryId) {
+        let next = categoryId || "";
+        if (root.currentCategory === next)
+            return;
+        root.currentCategory = next;
     }
 
     // DMS calls getItems synchronously on each keystroke, so we filter the
-    // cached tab list rather than re-running bt list (which can take 100ms+).
+    // cached tab list rather than re-running tabctl list.
     function getItems(query) {
         if (!root.enabled)
             return [];
 
         const q = (query || "").trim().toLowerCase();
-        let matches = [];
+        const cat = root.currentCategory || "";
+        let grouped = [];
+        let groupIndex = {};
 
         for (let i = 0; i < root.tabs.length; i++) {
             let t = root.tabs[i];
-            if (q.length === 0) {
-                matches.push(t);
-            } else {
+            let profile = t.profile || root.profileFromTabId(t.id);
+            if (cat.length > 0 && profile !== cat)
+                continue;
+            if (q.length > 0) {
                 let title = (t.title || "").toLowerCase();
                 let url = (t.url || "").toLowerCase();
-                if (title.indexOf(q) !== -1 || url.indexOf(q) !== -1)
-                    matches.push(t);
+                let profileKey = profile.toLowerCase();
+                let profileName = root.displayNameForProfile(profile).toLowerCase();
+                if (title.indexOf(q) === -1 && url.indexOf(q) === -1 && profileKey.indexOf(q) === -1 && profileName.indexOf(q) === -1)
+                    continue;
             }
-            if (matches.length >= 50)
-                break;
+            if (groupIndex[profile] === undefined) {
+                groupIndex[profile] = grouped.length;
+                grouped.push({
+                    profile: profile,
+                    tabs: []
+                });
+            }
+            grouped[groupIndex[profile]].tabs.push(t);
         }
 
+        let matches = [];
+        let limit = q.length > 0 ? 50 : 200;
+        for (let g = 0; g < grouped.length; g++) {
+            for (let j = 0; j < grouped[g].tabs.length; j++) {
+                matches.push(grouped[g].tabs[j]);
+                if (matches.length >= limit)
+                    return matches.map(tabToItem);
+            }
+        }
         return matches.map(tabToItem);
     }
 
     function tabToItem(tab) {
+        let profile = tab.profile || root.profileFromTabId(tab.id);
+        let profileName = root.displayNameForProfile(profile);
         return {
             name: tab.title || tab.url,
             icon: iconForTab(tab),
-            comment: tab.url,
+            comment: profileName + " · " + (tab.url || ""),
             action: "activate:" + tab.id,
+            categories: [profileName],
+            keywords: [profile, profileName],
             _tabId: tab.id,
-            _url: tab.url
+            _url: tab.url,
+            _profile: profile
         };
     }
 
     function executeItem(item) {
         if (!item || !item._tabId)
             return;
-        Quickshell.execDetached([root.effectiveBtPath(), "activate", "--focused", item._tabId]);
+        Quickshell.execDetached([root.effectiveTabctlPath(), "activate", "--focused", item._tabId]);
     }
 
     function getContextMenuActions(item) {
@@ -258,7 +319,7 @@ QtObject {
                 icon: "close",
                 text: "Close tab",
                 action: () => {
-                    Quickshell.execDetached([root.effectiveBtPath(), "close", item._tabId]);
+                    Quickshell.execDetached([root.effectiveTabctlPath(), "close", item._tabId]);
                     root.refreshTabs();
                 }
             },
@@ -275,7 +336,7 @@ QtObject {
             return;
 
         root.enabled = root.pluginService.loadPluginData("tabsLauncher", "enabled", true);
-        root.btPath = root.pluginService.loadPluginData("tabsLauncher", "btPath", "bt");
+        root.tabctlPath = root.pluginService.loadPluginData("tabsLauncher", "tabctlPath", "tabctl");
         root.refreshIntervalMs = root.pluginService.loadPluginData("tabsLauncher", "refreshIntervalMs", 5000);
 
         let noTrigger = root.pluginService.loadPluginData("tabsLauncher", "noTrigger", false);
@@ -287,19 +348,18 @@ QtObject {
             return;
         }
 
-        if (root.btPath === "bt" && root._resolvedBtPath.length === 0) {
+        if (root.tabctlPath === "tabctl" && root._resolvedTabctlPath.length === 0) {
             root.resolveProcess.running = true;
         } else {
-            root.refreshClients();
             root.refreshTabs();
         }
     }
 
     Component.onCompleted: {
-        // pluginService may not be injected yet at component completion, but bt
-        // path resolution doesn't depend on it — start it now so refreshTabs is
-        // ready by the time anyone wants the tab list.
-        if (root._resolvedBtPath.length === 0 && !root.resolveProcess.running)
+        // pluginService may not be injected yet at component completion, but
+        // tabctl path resolution doesn't depend on it — start it now so
+        // refreshTabs is ready by the time anyone wants the tab list.
+        if (root._resolvedTabctlPath.length === 0 && !root.resolveProcess.running)
             root.resolveProcess.running = true;
         root.updateSettings();
     }
