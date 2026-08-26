@@ -117,15 +117,38 @@ QtObject {
         return id.substring(0, dot);
     }
 
+    function prettyNameForFamily(family) {
+        // tabctl Keys lowercased. Compound editions/channels need spaces.
+        switch (family) {
+        case "braveorigin":
+            return "Brave Origin";
+        case "braveoriginbeta":
+            return "Brave Origin Beta";
+        case "braveoriginnightly":
+            return "Brave Origin Nightly";
+        case "braveorigindevelopment":
+            return "Brave Origin Development";
+        case "bravebeta":
+            return "Brave Beta";
+        case "bravenightly":
+            return "Brave Nightly";
+        case "bravedevelopment":
+            return "Brave Development";
+        case "librewolf":
+            return "LibreWolf";
+        default:
+            if (!family)
+                return "";
+            return family.charAt(0).toUpperCase() + family.slice(1);
+        }
+    }
+
     function displayNameForProfile(profile) {
         let p = profile || "";
         let m = p.match(/^([A-Za-z]+)([0-9]*)$/);
         if (!m)
             return p;
-        let family = m[1].toLowerCase();
-        let pretty = family.charAt(0).toUpperCase() + family.slice(1);
-        if (family === "librewolf")
-            pretty = "LibreWolf";
+        let pretty = root.prettyNameForFamily(m[1].toLowerCase());
         if (m[2])
             return pretty + " " + m[2];
         return pretty;
@@ -133,6 +156,11 @@ QtObject {
 
     function iconForBrowserName(name) {
         let n = (name || "").toLowerCase();
+        // Brave Origin is a separate product (icon brave-origin). Match it
+        // before the generic "brave" prefix, including extra profiles
+        // (braveorigin2) and channels (braveoriginnightly).
+        if (n.indexOf("braveorigin") !== -1 || n.indexOf("brave-origin") !== -1)
+            return "brave-origin";
         if (n.indexOf("brave") !== -1)
             return "brave-browser";
         if (n.indexOf("librewolf") !== -1)

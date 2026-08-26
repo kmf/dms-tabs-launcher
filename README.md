@@ -10,7 +10,7 @@ A [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell) launcher
 - Groups tabs by browser profile (`firefox`, `firefox2`, …) until you type a query
 - Filters by title, URL, or profile as you type; multiple profiles also appear as launcher categories
 - Activates the selected tab (focuses both tab and browser window)
-- Per-browser icons (Brave, Chrome, Chromium, Firefox, LibreWolf, Zen, Helium, Vivaldi, Opera) derived from the tabctl tab ID prefix
+- Per-browser icons (Brave, Brave Origin, Chrome, Chromium, Firefox, LibreWolf, Zen, Helium, Vivaldi, Opera) derived from the tabctl tab ID prefix
 - Context menu: copy URL, close tab, refresh tab list
 - Always-active mode (skip trigger keyword)
 - Background refresh so tab changes are picked up without re-running `tabctl list` on every keystroke
@@ -37,7 +37,7 @@ The plugin shells out to the `tabctl` CLI, which talks to a browser extension vi
    ```
 3. **Install the browser extension** in every browser you want indexed:
    - Firefox / Zen: <https://addons.mozilla.org/en-US/firefox/addon/tabctl1/>
-   - Chrome / Chromium / Brave / Helium: <https://chromewebstore.google.com/detail/tabctl/baomblllgemcgbignhpbipgiofmjdhpn>
+   - Chrome / Chromium / Brave / Brave Origin / Helium: <https://chromewebstore.google.com/detail/tabctl/baomblllgemcgbignhpbipgiofmjdhpn>
 4. **Restart each browser** and verify with:
    ```bash
    tabctl status   # should report OK for each connected browser
