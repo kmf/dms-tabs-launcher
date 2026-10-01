@@ -13,7 +13,7 @@ A [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell) launcher
 - Per-browser icons (Brave, Brave Origin, Chrome, Chromium, Firefox, LibreWolf, Zen, Helium, Vivaldi, Opera) derived from the tabctl tab ID prefix
 - Context menu: copy URL, close tab, refresh tab list
 - Always-active mode (skip trigger keyword)
-- Background refresh so tab changes are picked up without re-running `tabctl list` on every keystroke
+- Cached tab list, refreshed in the background when you query the launcher and the cache is older than 5s; nothing runs while the launcher is idle
 
 ## Installing tabctl
 

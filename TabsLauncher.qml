@@ -10,6 +10,8 @@ QtObject {
     property string trigger: "tab"
     property bool enabled: true
     property string tabctlPath: "tabctl"
+    // Max age of the cached tab list. A query against an older cache kicks
+    // off a background refresh; nothing polls while the launcher is idle.
     property int refreshIntervalMs: 5000
 
     signal itemsChanged
@@ -17,6 +19,7 @@ QtObject {
     // [{ id, title, url, profile }]
     property var tabs: []
     property bool _loading: false
+    property real _lastRefreshMs: 0
     property string currentCategory: ""
     // Resolved tabctl absolute path. dms.service has a minimal PATH so a bare
     // "tabctl" usually fails — we look it up in common install locations once.
@@ -102,6 +105,7 @@ QtObject {
             return;
         }
         root._loading = true;
+        root._lastRefreshMs = Date.now();
         root.listProcess.command = [root.effectiveTabctlPath(), "list"];
         root.listProcess.running = true;
     }
@@ -264,10 +268,14 @@ QtObject {
     }
 
     // DMS calls getItems synchronously on each keystroke, so we filter the
-    // cached tab list rather than re-running tabctl list.
+    // cached tab list rather than re-running tabctl list. A stale cache
+    // triggers an async refresh; its results arrive via requestLauncherUpdate.
     function getItems(query) {
         if (!root.enabled)
             return [];
+
+        if (Date.now() - root._lastRefreshMs >= root.refreshIntervalMs)
+            root.refreshTabs();
 
         const q = (query || "").trim().toLowerCase();
         const cat = root.currentCategory || "";
@@ -359,8 +367,7 @@ QtObject {
                 icon: "content_copy",
                 text: "Copy URL",
                 action: () => {
-                    let url = item._url || "";
-                    Quickshell.execDetached(["sh", "-c", "echo -n '" + url.replace(/'/g, "'\\''") + "' | dms cl copy"]);
+                    Quickshell.execDetached(["dms", "cl", "copy", item._url || ""]);
                 }
             },
             {
@@ -423,12 +430,5 @@ QtObject {
             if (pluginId === "tabsLauncher")
                 root.updateSettings();
         }
-    }
-
-    property var refreshTimer: Timer {
-        interval: root.refreshIntervalMs
-        running: root.enabled
-        repeat: true
-        onTriggered: root.refreshTabs()
     }
 }
